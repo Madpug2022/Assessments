@@ -29,7 +29,15 @@ export const PatientDashboard = () => {
         ]);
         setStats(statsResponse.stats);
         const appointments = appointmentsResponse.appointments || [];
-        setRecentAppointments(appointments.slice(0, 3));
+        // This appointments are not being filtered by user id. This is also not correct. We should filter the appointments by user id in the backend. This is just a temporary solution.
+        // Since it is not specified in the task, i will do it here, but it is not the best solution. We should filter the appointments by user id in the backend.
+        // And by no means this is a good solution, since it is not efficient at all. We are fetching all the appointments and then filtering them in the frontend. This is not good at all.
+        // Written by Matias.
+        const myAppointments = appointments.filter(apt => {
+          const patientId = apt.patient?._id || apt.patient;
+          return patientId === user._id;
+        });
+        setRecentAppointments(myAppointments.slice(0, 3));
         const analyses = analysesResponse.analyses || [];
         setRecentAnalyses(analyses.slice(0, 3));
         setTrends(trendsResponse.trends || []);

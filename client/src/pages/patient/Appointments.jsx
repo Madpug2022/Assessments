@@ -20,6 +20,20 @@ export const Appointments = () => {
     reason: '',
     symptoms: '',
   });
+  const [errors, setErrors] = useState({
+    doctor: '',
+    appointmentDate: '',
+    appointmentTime: '',
+    reason: '',
+  });
+  const [touched, setTouched] = useState({
+    doctor: false,
+    appointmentDate: false,
+    appointmentTime: false,
+    reason: false,
+  });
+  const [isFormValid, setIsFormValid] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   useEffect(() => {
     fetchAppointments();
@@ -46,10 +60,119 @@ export const Appointments = () => {
     }
   };
 
+  // Validate individual form fields based on business rules (future dates, business hours, min length)
+  // I added error state to contain a message for each field, and touched state to track if the user has interacted with the field. This way we can show error messages only after the user has interacted with the field. I also added a isFormValid state to track if the form is valid or not, and disable the submit button if the form is not valid. Written by Matias.
+  // The validateField function checks the value of each field against the specified validation rules and returns an appropriate error message if the validation fails. The validateForm function aggregates the errors for all fields and updates the form's validity state. The handleFieldChange and handleFieldBlur functions manage user interactions with the form fields, updating the form data, touched state, and error messages accordingly.
+  // This approach ensures that users receive immediate feedback on their input, guiding them to correct any issues before submitting the form. It also enhances the overall user experience by preventing invalid submissions and providing clear instructions on how to fix any errors.
+  // The timeout for the success message is set to 5 seconds, which gives users enough time to see the confirmation without it lingering too long on the screen.
+  // Written by Matias.
+  const validateField = (name, value) => {
+    let error = '';
+    
+    switch (name) {
+      case 'doctor':
+        if (!value) {
+          error = 'Please select a doctor';
+        }
+        break;
+        
+      case 'appointmentDate':
+        if (!value) {
+          error = 'Date is required';
+        } else {
+          const selectedDate = new Date(value);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          if (selectedDate < today) {
+            error = 'Date must be in the future';
+          }
+        }
+        break;
+        
+      case 'appointmentTime':
+        if (!value) {
+          error = 'Time is required';
+        } else {
+          const [hours, minutes] = value.split(':');
+          const timeInMinutes = parseInt(hours) * 60 + parseInt(minutes);
+          const startTime = 9 * 60;
+          const endTime = 17 * 60; 
+          
+          if (timeInMinutes < startTime || timeInMinutes >= endTime) {
+            error = 'Time must be between 9:00 AM and 5:00 PM';
+          }
+        }
+        break;
+        
+      case 'reason':
+        if (!value) {
+          error = 'Reason is required';
+        } else if (value.trim().length < 10) {
+          error = 'Reason must be at least 10 characters';
+        }
+        break;
+    }
+    
+    return error;
+  };
+
+  const validateForm = () => {
+    const newErrors = {
+      doctor: validateField('doctor', formData.doctor),
+      appointmentDate: validateField('appointmentDate', formData.appointmentDate),
+      appointmentTime: validateField('appointmentTime', formData.appointmentTime),
+      reason: validateField('reason', formData.reason),
+    };
+    
+    setErrors(newErrors);
+    
+    const isValid = Object.values(newErrors).every(error => error === '');
+    setIsFormValid(isValid);
+    
+    return isValid;
+  };
+
+  const handleFieldChange = (name, value) => {
+    setFormData({ ...formData, [name]: value });
+    
+    setTouched({ ...touched, [name]: true });
+    
+    const error = validateField(name, value);
+    setErrors({ ...errors, [name]: error });
+    
+    const newErrors = {
+      doctor: validateField('doctor', name === 'doctor' ? value : formData.doctor),
+      appointmentDate: validateField('appointmentDate', name === 'appointmentDate' ? value : formData.appointmentDate),
+      appointmentTime: validateField('appointmentTime', name === 'appointmentTime' ? value : formData.appointmentTime),
+      reason: validateField('reason', name === 'reason' ? value : formData.reason),
+    };
+    const isValid = Object.values(newErrors).every(error => error === '');
+    setIsFormValid(isValid);
+  };
+
+  const handleFieldBlur = (name) => {
+    setTouched({ ...touched, [name]: true });
+    const error = validateField(name, formData[name]);
+    setErrors({ ...errors, [name]: error });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    setTouched({
+      doctor: true,
+      appointmentDate: true,
+      appointmentTime: true,
+      reason: true,
+    });
+    
+    if (!validateForm()) {
+      return;
+    }
+    
     try {
       await appointmentService.create(formData);
+      
       setShowForm(false);
       setFormData({
         doctor: '',
@@ -58,6 +181,24 @@ export const Appointments = () => {
         reason: '',
         symptoms: '',
       });
+
+      setErrors({
+        doctor: '',
+        appointmentDate: '',
+        appointmentTime: '',
+        reason: '',
+      });
+      setTouched({
+        doctor: false,
+        appointmentDate: false,
+        appointmentTime: false,
+        reason: false,
+      });
+      setIsFormValid(false);
+      
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 5000); 
+      
       fetchAppointments();
     } catch (error) {
       alert(error.response?.data?.message || 'Failed to create appointment');
@@ -106,6 +247,20 @@ export const Appointments = () => {
         </Button>
       </div>
 
+      {/* There is no design for this but i created this to display the message */}
+      {showSuccess && (
+        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative" role="alert">
+          <strong className="font-bold">Success!</strong>
+          <span className="block sm:inline"> Your appointment has been booked successfully.</span>
+          <span 
+            className="absolute top-0 bottom-0 right-0 px-4 py-3 cursor-pointer"
+            onClick={() => setShowSuccess(false)}
+          >
+            <X className="h-5 w-5" />
+          </span>
+        </div>
+      )}
+
       {showForm && (
         <Card>
           <CardHeader>
@@ -115,13 +270,17 @@ export const Appointments = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="doctor">Doctor</Label>
+                  <Label htmlFor="doctor">Doctor *</Label>
                   <select
                     id="doctor"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    className={`flex h-10 w-full rounded-md border px-3 py-2 text-sm ${
+                      touched.doctor && errors.doctor 
+                        ? 'border-red-500 bg-background' 
+                        : 'border-input bg-background'
+                    }`}
                     value={formData.doctor}
-                    onChange={(e) => setFormData({ ...formData, doctor: e.target.value })}
-                    required
+                    onChange={(e) => handleFieldChange('doctor', e.target.value)}
+                    onBlur={() => handleFieldBlur('doctor')}
                   >
                     <option value="">Select a doctor</option>
                     {doctors.map((doctor) => (
@@ -130,36 +289,53 @@ export const Appointments = () => {
                       </option>
                     ))}
                   </select>
+                  {touched.doctor && errors.doctor && (
+                    <p className="text-sm text-red-500">{errors.doctor}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="appointmentDate">Date</Label>
+                  <Label htmlFor="appointmentDate">Date *</Label>
                   <Input
                     id="appointmentDate"
                     type="date"
                     value={formData.appointmentDate}
-                    onChange={(e) => setFormData({ ...formData, appointmentDate: e.target.value })}
-                    required
+                    onChange={(e) => handleFieldChange('appointmentDate', e.target.value)}
+                    onBlur={() => handleFieldBlur('appointmentDate')}
+                    className={touched.appointmentDate && errors.appointmentDate ? 'border-red-500' : ''}
                     min={new Date().toISOString().split('T')[0]}
                   />
+                  {touched.appointmentDate && errors.appointmentDate && (
+                    <p className="text-sm text-red-500">{errors.appointmentDate}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="appointmentTime">Time</Label>
+                  <Label htmlFor="appointmentTime">Time *</Label>
                   <Input
                     id="appointmentTime"
                     type="time"
                     value={formData.appointmentTime}
-                    onChange={(e) => setFormData({ ...formData, appointmentTime: e.target.value })}
-                    required
+                    onChange={(e) => handleFieldChange('appointmentTime', e.target.value)}
+                    onBlur={() => handleFieldBlur('appointmentTime')}
+                    className={touched.appointmentTime && errors.appointmentTime ? 'border-red-500' : ''}
                   />
+                  <p className="text-xs text-muted-foreground">Business hours: 9:00 AM - 5:00 PM</p>
+                  {touched.appointmentTime && errors.appointmentTime && (
+                    <p className="text-sm text-red-500">{errors.appointmentTime}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="reason">Reason</Label>
+                  <Label htmlFor="reason">Reason *</Label>
                   <Input
                     id="reason"
                     value={formData.reason}
-                    onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                    placeholder="Brief reason for visit"
+                    onChange={(e) => handleFieldChange('reason', e.target.value)}
+                    onBlur={() => handleFieldBlur('reason')}
+                    className={touched.reason && errors.reason ? 'border-red-500' : ''}
+                    placeholder="Brief reason for visit (min 10 characters)"
                   />
+                  {touched.reason && errors.reason && (
+                    <p className="text-sm text-red-500">{errors.reason}</p>
+                  )}
                 </div>
               </div>
               <div className="space-y-2">
@@ -173,8 +349,39 @@ export const Appointments = () => {
                 />
               </div>
               <div className="flex space-x-2">
-                <Button type="submit">Book Appointment</Button>
-                <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
+                <Button 
+                  type="submit" 
+                  disabled={!isFormValid || !formData.doctor || !formData.appointmentDate || !formData.appointmentTime || !formData.reason}
+                >
+                  Book Appointment
+                </Button>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => {
+                    setShowForm(false);
+                    setFormData({
+                      doctor: '',
+                      appointmentDate: '',
+                      appointmentTime: '',
+                      reason: '',
+                      symptoms: '',
+                    });
+                    setErrors({
+                      doctor: '',
+                      appointmentDate: '',
+                      appointmentTime: '',
+                      reason: '',
+                    });
+                    setTouched({
+                      doctor: false,
+                      appointmentDate: false,
+                      appointmentTime: false,
+                      reason: false,
+                    });
+                    setIsFormValid(false);
+                  }}
+                >
                   Cancel
                 </Button>
               </div>
